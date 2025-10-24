@@ -126,7 +126,6 @@ def solve(lines):
     for depth in range(room_size):
         line = lines[2 + depth].strip()
         
-        
         if line.startswith('  '):
             line = line[2:]
         
@@ -135,9 +134,9 @@ def solve(lines):
         else:  
             positions = [1, 3, 5, 7]
         
-        for i, pos in enumerate(positions):
+        for j, pos in enumerate(positions):
             if pos < len(line) and line[pos] in 'ABCD':
-                rooms[i].append(line[pos])
+                rooms[j].append(line[pos])
     
     initial_hallway = [None] * 11
     
