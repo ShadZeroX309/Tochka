@@ -1,6 +1,7 @@
 import sys
 from collections import deque
 
+
 def solve(edges: list[tuple[str, str]]) -> list[str]:
     graph = {}
     gateways = set()
@@ -22,79 +23,52 @@ def solve(edges: list[tuple[str, str]]) -> list[str]:
     virus_pos = 'a'
     
     while True:
-        target_gateway = find_target_gateway(graph, virus_pos, gateways)
+        target_gateway, path = find_target_gateway(graph, virus_pos, gateways)
+        
         if target_gateway is None:
             break
             
-        optimal_path = find_optimal_path_to_gateway(graph, virus_pos, target_gateway)
-        if not optimal_path or len(optimal_path) < 2:
-            break
-            
-        edge_to_cut = find_gateway_edge_on_path(optimal_path, gateways)
+        
+        edge_to_cut = None
+        
+        for i in range(len(path) - 1):
+            if path[i+1] in gateways:
+                edge_to_cut = (path[i+1], path[i])
+                break
+            elif path[i] in gateways:
+                edge_to_cut = (path[i], path[i+1])
+                break
+        
         if edge_to_cut is None:
             edge_to_cut = find_lexicographically_smallest_gateway_edge(graph, gateways)
             if edge_to_cut is None:
                 break
         
         result.append(f"{edge_to_cut[0]}-{edge_to_cut[1]}")
+        
         graph[edge_to_cut[0]].remove(edge_to_cut[1])
         graph[edge_to_cut[1]].remove(edge_to_cut[0])
         
-        new_path = find_optimal_path_to_gateway(graph, virus_pos, target_gateway)
-        
+        _, new_path = find_target_gateway(graph, virus_pos, gateways)
         if new_path and len(new_path) > 1:
             virus_pos = new_path[1]
         else:
-            new_target_gateway = find_target_gateway(graph, virus_pos, gateways)
-            if new_target_gateway:
-                new_path_to_new_target = find_optimal_path_to_gateway(graph, virus_pos, new_target_gateway)
-                if new_path_to_new_target and len(new_path_to_new_target) > 1:
-                    target_gateway = new_target_gateway
-                    virus_pos = new_path_to_new_target[1]
-                else:
-                    break
-            else:
-                break
+            break
             
     return result
 
 def find_target_gateway(graph, start, gateways):
-    distances = {}
-    visited = set()
-    queue = deque([(start, 0)])
-    
-    while queue:
-        current, dist = queue.popleft()
-        if current in visited:
-            continue
-        visited.add(current)
-        
-        if current in gateways:
-            distances[current] = dist
-            continue
-            
-        if current in graph:
-            for neighbor in sorted(graph[current]):
-                if neighbor not in visited:
-                    queue.append((neighbor, dist + 1))
-    
-    if not distances:
-        return None
-    
-    min_distance = min(distances.values())
-    candidate_gateways = [gw for gw, dist in distances.items() if dist == min_distance]
-    
-    return sorted(candidate_gateways)[0]
-
-def find_optimal_path_to_gateway(graph, start, target_gateway):
     visited = {start: None}
     queue = deque([start])
+    gateways_reached = {}
     
     while queue:
         current = queue.popleft()
         
-        if current == target_gateway:
-            return reconstruct_path(visited, start, target_gateway)
+        if current in gateways:
+            path = reconstruct_path(visited, start, current)
+            gateways_reached[current] = path
+            continue
             
         if current in graph:
             neighbors = sorted(graph[current])
@@ -103,14 +77,22 @@ def find_optimal_path_to_gateway(graph, start, target_gateway):
                     visited[neighbor] = current
                     queue.append(neighbor)
     
-    return None
-
-def find_gateway_edge_on_path(path, gateways):
-    for i in range(len(path) - 1):
-        node1, node2 = path[i], path[i+1]
-        if node1 in gateways or node2 in gateways:
-            return (node1, node2) if node1 in gateways else (node2, node1)
-    return None
+    if not gateways_reached:
+        return None, None
+    
+    min_distance = float('inf')
+    candidate_gateways = []
+    
+    for gateway, path in gateways_reached.items():
+        distance = len(path) - 1
+        if distance < min_distance:
+            min_distance = distance
+            candidate_gateways = [(gateway, path)]
+        elif distance == min_distance:
+            candidate_gateways.append((gateway, path))
+    
+    candidate_gateways.sort(key=lambda x: x[0])
+    return candidate_gateways[0]
 
 def find_lexicographically_smallest_gateway_edge(graph, gateways):
     possible_cuts = []
