@@ -1,146 +1,158 @@
 import sys
-from collections import deque
-from typing import List, Tuple
+from collections import deque, defaultdict
 
-def solve(edges: List[Tuple[str, str]]) -> List[str]:
+def solve(edges: list[tuple[str, str]]) -> list[str]:
 
-    class Network:
-        def __init__(self):
-            self.graph = {}
-            self.gateways = set()
-        
-        def add_link(self, node1: str, node2: str):
-            if node1 not in self.graph:
-                self.graph[node1] = []
-            if node2 not in self.graph:
-                self.graph[node2] = []
-            
-            self.graph[node1].append(node2)
-            self.graph[node2].append(node1)
-            
-            if node1.isupper():
-                self.gateways.add(node1)
-            if node2.isupper():
-                self.gateways.add(node2)
-        
-        def remove_link(self, node1: str, node2: str):
-            if node1 in self.graph and node2 in self.graph[node1]:
-                self.graph[node1].remove(node2)
-            if node2 in self.graph and node1 in self.graph[node2]:
-                self.graph[node2].remove(node1)
-        
-        def find_virus_path(self, virus_pos: str) -> Tuple[str, List[str]]:
-            if virus_pos in self.gateways:
-                return virus_pos, [virus_pos]
-            
-            visited = set()
-            queue = deque([(virus_pos, [virus_pos])])
-            gateway_paths = []
-            
-            while queue:
-                current, path = queue.popleft()
-                if current in visited:
-                    continue
-                visited.add(current)
-                
-                if current in self.gateways:
-                    distance = len(path) - 1
-                    gateway_paths.append((current, path, distance))
-                    continue
-                
-                for neighbor in sorted(self.graph.get(current, [])):
-                    if neighbor not in visited:
-                        queue.append((neighbor, path + [neighbor]))
-            
-            if not gateway_paths:
-                return None, []
-            
-            gateway_paths.sort(key=lambda x: (x[2], x[0]))
-            target_gateway, best_path, _ = gateway_paths[0]
-            
-            return target_gateway, best_path
-        
-        def get_virus_next_move(self, virus_pos: str) -> str:
-            target_gateway, path = self.find_virus_path(virus_pos)
-            if not path or len(path) < 2:
-                return virus_pos
-            return path[1] 
-        
-        def simulate_game(self) -> List[str]:
-            result = []
-            virus_pos = "a"
-            
-            while True:
-
-                if virus_pos in self.gateways:
-                    break
-                
-
-                action = self.get_best_action(virus_pos)
-                if not action:
-                    break
-                
-                result.append(action)
-
-                gateway, node = action.split('-')
-                self.remove_link(gateway, node)
-                
-
-                if virus_pos not in self.gateways:
-                    next_move = self.get_virus_next_move(virus_pos)
-                    if next_move != virus_pos and next_move in self.graph.get(virus_pos, []):
-                        virus_pos = next_move
-                    else:
-                        break 
-            
-            return result
-        
-        def get_best_action(self, virus_pos: str) -> str:
-            for neighbor in sorted(self.graph.get(virus_pos, [])):
-                if neighbor in self.gateways:
-                    return f"{neighbor}-{virus_pos}"
-            
-            next_move = self.get_virus_next_move(virus_pos)
-
-            if next_move in self.gateways:
-                return f"{next_move}-{virus_pos}"
-            
-
-            for neighbor in sorted(self.graph.get(next_move, [])):
-                if neighbor in self.gateways:
-                    return f"{neighbor}-{next_move}"
-            
-            all_links = []
-            for gateway in sorted(self.gateways):
-                if gateway in self.graph:
-                    for node in sorted(self.graph[gateway]):
-                        all_links.append(f"{gateway}-{node}")
-            
-            return all_links[0] if all_links else None
+    graph = defaultdict(set)
+    gateways = set()
+    gateway_links = []
     
-    network = Network()
     for node1, node2 in edges:
-        network.add_link(node1, node2)
+        graph[node1].add(node2)
+        graph[node2].add(node1)
+
+        if node1.isupper():
+            gateways.add(node1)
+            gateway_links.append((node1, node2))
+        if node2.isupper():
+            gateways.add(node2)
+            gateway_links.append((node2, node1))
+    gateway_links.sort()
     
-    return network.simulate_game()
+    result = []
+    virus_pos = "a"
+    
+    def bfs_distances(start):
+        distances = {start: 0}
+        queue = deque([start])
+        
+        while queue:
+            current = queue.popleft()
+            for neighbor in graph.get(current, set()):
+                if neighbor not in distances:
+                    distances[neighbor] = distances[current] + 1
+                    queue.append(neighbor)
+        return distances
+    
+    def find_target_gateway(position):
+        distances = bfs_distances(position)
+        
+        reachable_gateways = [gw for gw in gateways if gw in distances]
+        
+        if not reachable_gateways:
+            return None
+            
+        min_dist = min(distances[gw] for gw in reachable_gateways)
+        candidate_gateways = [gw for gw in reachable_gateways if distances[gw] == min_dist]
+        
+        candidate_gateways.sort()
+        return candidate_gateways[0]
+    
+    def find_next_move(position, target_gateway):
+        distances = bfs_distances(target_gateway)
+        
+        neighbors = list(graph.get(position, set()))
+        neighbor_distances = []
+        for neighbor in neighbors:
+            if neighbor in distances:
+                neighbor_distances.append((neighbor, distances[neighbor]))
+        
+        if not neighbor_distances:
+            return None
+            
+        min_dist = min(dist for _, dist in neighbor_distances)
+        candidate_neighbors = [node for node, dist in neighbor_distances if dist == min_dist]
+        
+        candidate_neighbors.sort()
+        return candidate_neighbors[0]
+    
+    while True:
+        immediate_threat = None
+        for neighbor in graph.get(virus_pos, set()):
+            if neighbor in gateways:
+                immediate_threat = neighbor
+                break
+        
+        if immediate_threat:
+            if virus_pos < immediate_threat:
+                link = f"{virus_pos}-{immediate_threat}"
+            else:
+                link = f"{immediate_threat}-{virus_pos}"
+            
+            result.append(link)
+            graph[virus_pos].discard(immediate_threat)
+            graph[immediate_threat].discard(virus_pos)
+            
+            if graph[virus_pos]:
+                target_gw = find_target_gateway(virus_pos)
+                if target_gw:
+                    next_pos = find_next_move(virus_pos, target_gw)
+                    if next_pos:
+                        virus_pos = next_pos
+                    else:
+                        break
+                else:
+                    break
+            else:
+                break
+            continue
+        
+        target_gw = find_target_gateway(virus_pos)
+        if not target_gw:
+            break
+        
+        next_pos = find_next_move(virus_pos, target_gw)
+        if not next_pos:
+            break
+        
+        blocked = False
+        for gw_link in gateway_links:
+            gw, node = gw_link
+            if gw in graph and node in graph[gw]:
+                result.append(f"{gw}-{node}")
+                graph[gw].discard(node)
+                graph[node].discard(gw)
+                gateway_links = [(g, n) for g, n in gateway_links if not (g == gw and n == node)]
+                blocked = True
+                break
+        
+        if not blocked:
+            available_links = []
+            for gw in gateways:
+                for node in graph.get(gw, set()):
+                    available_links.append(f"{gw}-{node}")
+            
+            if available_links:
+                available_links.sort()
+                link = available_links[0]
+                result.append(link)
+                gw, node = link.split('-')
+                graph[gw].discard(node)
+                graph[node].discard(gw)
+            else:
+                break
+        
+        virus_pos = next_pos
+        
+        if virus_pos in gateways:
+            break
+    
+    return result
+
 
 def main():
     edges = []
     for line in sys.stdin:
         line = line.strip()
         if line:
-            parts = line.split('-')
-            if len(parts) == 2:
-                node1, node2 = parts
+            node1, sep, node2 = line.partition('-')
+            if sep:
                 edges.append((node1, node2))
-            else:
-                nodes = line.split()
-                if len(nodes) >= 2:
-                    edges.append((nodes[0], nodes[1]))
 
     result = solve(edges)
     for edge in result:
         print(edge)
+
 
 if __name__ == "__main__":
     main()
